@@ -1,0 +1,73 @@
+# =============== #
+# Unity generated #
+# =============== #
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+
+# Crash Reports
+sysinfo.txt
+
+# Auto-generated VS/JetBrains project files
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+
+# Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+.vs/
+
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Build artifacts
+*.apk
+*.aab
+*.xcarchive
+*.ipa
+
+# Unity Cloud Build
+unitycloudbuild/
+
+# Asset meta data should only be ignored when the corresponding asset is also ignored
+!*.meta
+
+# Uncomment if you have Unity 2020+ and want to ignore addressables build path
+# Assets/AddressableAssetsData/*/build/
+
+# Generated StreamingAssets data
+StreamingAssets/aa.meta
+StreamingAssets/aa/
+
+# Optional: Ignore user-specific config (Editor settings, layout, etc.)
+UserSettings/
+
+# Optional: Ignore 3rd-party package cache
+Packages/com.unity.package-manager-ui/
+
+# Yarn Spinner temp files
+*.yarn.txt
