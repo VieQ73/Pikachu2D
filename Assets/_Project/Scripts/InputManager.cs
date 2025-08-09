@@ -1,4 +1,3 @@
-// File: _Project/Scripts/Managers/InputManager.cs
 using System;
 using UnityEngine;
 
@@ -20,6 +19,6 @@ public class InputManager : MonoBehaviour
     {
         // Phát sự kiện đi cho bất kỳ ai đang lắng nghe (ở đây là GameManager)
         OnTileSelected?.Invoke(tile);
-        Debug.Log($"InputManager: Selected tile at {tile.GridPosition}");
+        Debug.Log($"InputManager: Đã chọn tiled tại {tile.GridPosition}");
     }
 }
