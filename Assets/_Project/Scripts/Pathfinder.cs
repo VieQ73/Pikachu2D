@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System.Linq;
 
 public static class Pathfinder
 {
@@ -8,7 +9,7 @@ public static class Pathfinder
         public Vector2Int Position;
         public Node Parent;
         public int Turns;
-        public Vector2Int Direction; // Hướng đi từ Parent tới Node này
+        public Vector2Int Direction; // Hướng đi TỪ parent đến node này
 
         public Node(Vector2Int pos, Node parent, int turns, Vector2Int dir)
         {
@@ -19,85 +20,115 @@ public static class Pathfinder
         }
     }
 
-    // Tìm đường đi giữa 2 tile
     public static List<Vector2Int> FindPath(Tile startTile, Tile endTile, Tile[,] grid, int width, int height)
     {
-        // Tạo một lưới logic lớn hơn bàn cờ để có thể đi vòng ngoài
+        Debug.Log($"[Pathfinder] Start {startTile.GridPosition} -> {endTile.GridPosition}");
+
         int extendedWidth = width + 2;
         int extendedHeight = height + 2;
-        bool[,] walkableGrid = new bool[extendedWidth, extendedHeight];
 
-        for (int y = 0; y < extendedHeight; y++)
+        // Sanity check: ensure grid dimensions match expected orientation
+        if (grid.GetLength(0) != width || grid.GetLength(1) != height)
         {
-            for (int x = 0; x < extendedWidth; x++)
-            {
-                // Vị trí trên bàn cờ gốc
-                Vector2Int gridPos = new Vector2Int(x - 1, y - 1);
-
-                // Các ô rìa ngoài và ô trống trên bàn cờ là đi được
-                if (x == 0 || x == extendedWidth - 1 || y == 0 || y == extendedHeight - 1 || grid[gridPos.x, gridPos.y] == null)
-                {
-                    walkableGrid[x, y] = true;
-                }
-            }
+            Debug.LogWarning($"[Pathfinder] Warning: grid dimensions ({grid.GetLength(0)},{grid.GetLength(1)}) != (width,height)=({width},{height}). Check x/y indexing!");
         }
 
         Vector2Int startPos = startTile.GridPosition + Vector2Int.one;
         Vector2Int endPos = endTile.GridPosition + Vector2Int.one;
 
-        // Ô bắt đầu và kết thúc cũng phải đi được
-        walkableGrid[startPos.x, startPos.y] = true;
-        walkableGrid[endPos.x, endPos.y] = true;
+        Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
+
+        // visited[x,y,dirIndex] = minimal turns to reach (x,y) arriving with direction dirIndex
+        int[,,] visited = new int[extendedWidth, extendedHeight, 4];
+        for (int x = 0; x < extendedWidth; x++)
+            for (int y = 0; y < extendedHeight; y++)
+                for (int d = 0; d < 4; d++)
+                    visited[x, y, d] = int.MaxValue;
 
         Queue<Node> queue = new Queue<Node>();
-        Dictionary<Vector2Int, Node> visited = new Dictionary<Vector2Int, Node>();
 
-        Node startNode = new Node(startPos, null, -1, Vector2Int.zero);
-        queue.Enqueue(startNode);
-        visited[startPos] = startNode;
-
-        Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
+        // Seed: put start position with each possible initial direction (turns = 0)
+        for (int d = 0; d < 4; d++)
+        {
+            visited[startPos.x, startPos.y, d] = 0;
+            queue.Enqueue(new Node(startPos, null, 0, directions[d]));
+        }
 
         while (queue.Count > 0)
         {
-            Node currentNode = queue.Dequeue();
+            var current = queue.Dequeue();
+            // get index of current.Direction
+            int curDirIndex = System.Array.FindIndex(directions, v => v == current.Direction);
+            if (curDirIndex < 0) curDirIndex = 0;
 
-            if (currentNode.Position == endPos)
+            for (int nd = 0; nd < 4; nd++)
             {
-                // Tìm thấy đường, tái tạo lại đường đi
-                List<Vector2Int> path = new List<Vector2Int>();
-                Node pathNode = currentNode;
-                while (pathNode != null)
-                {
-                    path.Add(pathNode.Position - Vector2Int.one); // Chuyển về tọa độ bàn cờ gốc
-                    pathNode = pathNode.Parent;
-                }
-                path.Reverse();
-                return path;
-            }
+                Vector2Int dir = directions[nd];
+                int newTurns = current.Turns;
 
-            foreach (var dir in directions)
-            {
-                Vector2Int nextPos = currentNode.Position + dir;
-                int newTurns = currentNode.Turns + (dir == currentNode.Direction ? 0 : 1);
+                // count a turn if we change direction AND current has a parent (so first move is free)
+                if (current.Parent != null && nd != curDirIndex) newTurns++;
 
-                if (newTurns > 2) continue; // Vượt quá 2 lần rẽ
+                if (newTurns > 2) continue; // keep limit = 2 turns (adjust if needed)
 
-                // Kiểm tra biên
+                Vector2Int nextPos = current.Position + dir;
+
+                // bounds
                 if (nextPos.x < 0 || nextPos.x >= extendedWidth || nextPos.y < 0 || nextPos.y >= extendedHeight) continue;
 
-                // Chỉ đi vào ô đi được
-                if (!walkableGrid[nextPos.x, nextPos.y] && nextPos != endPos) continue;
+                // if next is destination -> reconstruct using current as parent
+                if (nextPos == endPos)
+                {
+                    var finalPath = ReconstructPath(current, endPos, startPos);
+                    Debug.Log($"[Pathfinder] Found path with turns={newTurns}");
+                    return finalPath;
+                }
 
-                // Kiểm tra đã ghé thăm và có đường đi tốt hơn không
-                if (visited.ContainsKey(nextPos) && visited[nextPos].Turns <= newTurns) continue;
+                // check passable: convert to original grid coords
+                Vector2Int gridPos = nextPos - Vector2Int.one;
+                bool isWalkable = true;
+                // only check walkable if nextPos is inside visible area
+                if (gridPos.x >= 0 && gridPos.x < width && gridPos.y >= 0 && gridPos.y < height)
+                {
+                    var tile = grid[gridPos.x, gridPos.y];
+                    isWalkable = (tile == null || tile.TileType == 0);
+                }
+                // else if outside visible area (border) -> treat as passable (that's the point of border)
 
-                Node neighborNode = new Node(nextPos, currentNode, newTurns, dir);
-                visited[nextPos] = neighborNode;
-                queue.Enqueue(neighborNode);
+                if (!isWalkable) continue;
+
+                if (visited[nextPos.x, nextPos.y, nd] > newTurns)
+                {
+                    visited[nextPos.x, nextPos.y, nd] = newTurns;
+                    Node neighbor = new Node(nextPos, current, newTurns, dir);
+                    queue.Enqueue(neighbor);
+                }
             }
         }
 
-        return null; // Không tìm thấy đường
+        Debug.LogWarning("[Pathfinder] No path found.");
+        return null;
+    }
+
+    private static List<Vector2Int> ReconstructPath(Node endNodeParent, Vector2Int endPos, Vector2Int startPos)
+    {
+        List<Vector2Int> path = new List<Vector2Int>();
+        path.Add(endPos - Vector2Int.one); // Điểm cuối
+
+        Node currentNode = endNodeParent;
+        while (currentNode != null)
+        {
+            // Chỉ thêm các điểm rẽ (góc) và điểm bắt đầu vào path
+            if (currentNode.Parent == null || currentNode.Direction != currentNode.Parent.Direction)
+            {
+                path.Add(currentNode.Position - Vector2Int.one);
+            }
+            currentNode = currentNode.Parent;
+        }
+
+        path.Add(startPos - Vector2Int.one); // Điểm đầu
+
+        path.Reverse(); // Đảo ngược để có thứ tự từ Start -> End
+        return path;
     }
 }

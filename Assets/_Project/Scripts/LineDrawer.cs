@@ -1,42 +1,67 @@
 using UnityEngine;
-using System.Collections.Generic;
 using System.Collections;
+using System.Collections.Generic;
 
 [RequireComponent(typeof(LineRenderer))]
 public class LineDrawer : MonoBehaviour
 {
-    private LineRenderer _lineRenderer;
-    private RectTransform _rectTransform;
+    private LineRenderer lineRenderer;
 
     private void Awake()
     {
-        _lineRenderer = GetComponent<LineRenderer>();
-        _rectTransform = GetComponent<RectTransform>();
-        _lineRenderer.enabled = false;
+        lineRenderer = GetComponent<LineRenderer>();
+        lineRenderer.enabled = false;
+        lineRenderer.positionCount = 0;
+        lineRenderer.useWorldSpace = true; // Quan trọng để vẽ trong Game View
     }
 
-    public void DrawLine(List<Vector2> points)
+    public void DrawLineAnimated(List<Vector3> worldPoints, float duration, System.Action onComplete = null)
     {
-        if (points == null || points.Count < 2) return;
-
-        StopAllCoroutines(); // Dừng coroutine cũ nếu có
-
-        _lineRenderer.positionCount = points.Count;
-        Vector3[] positions = new Vector3[points.Count];
-        for (int i = 0; i < points.Count; i++)
+        if (worldPoints == null || worldPoints.Count < 2)
         {
-            positions[i] = new Vector3(points[i].x, points[i].y, 0);
+            Debug.LogWarning("[LineDrawer] Không thể vẽ đường với ít hơn 2 điểm.");
+            return;
         }
 
-        _lineRenderer.SetPositions(positions);
-        _lineRenderer.enabled = true;
-
-        StartCoroutine(HideLineAfterDelay(0.3f));
+        StopAllCoroutines();
+        StartCoroutine(DrawLineRoutine(worldPoints, duration, onComplete));
     }
 
-    private IEnumerator HideLineAfterDelay(float delay)
+    private IEnumerator DrawLineRoutine(List<Vector3> worldPoints, float duration, System.Action onComplete)
     {
-        yield return new WaitForSeconds(delay);
-        _lineRenderer.enabled = false;
+        lineRenderer.positionCount = 0;
+        lineRenderer.enabled = true;
+
+        float totalDist = 0;
+        for (int i = 1; i < worldPoints.Count; i++)
+            totalDist += Vector3.Distance(worldPoints[i - 1], worldPoints[i]);
+
+        Vector3 prevPos = worldPoints[0];
+        lineRenderer.positionCount = 1;
+        lineRenderer.SetPosition(0, prevPos);
+
+        for (int i = 1; i < worldPoints.Count; i++)
+        {
+            Vector3 targetPos = worldPoints[i];
+            float segDist = Vector3.Distance(prevPos, targetPos);
+            float t = 0;
+            while (t < 1f)
+            {
+                t += Time.deltaTime / (duration * (segDist / totalDist));
+                Vector3 newPos = Vector3.Lerp(prevPos, targetPos, t);
+                if (lineRenderer.positionCount < i + 1)
+                    lineRenderer.positionCount = i + 1;
+                lineRenderer.SetPosition(i, newPos);
+                yield return null;
+            }
+            prevPos = targetPos;
+        }
+
+        yield return new WaitForSeconds(0.1f);
+
+        lineRenderer.enabled = false;
+        lineRenderer.positionCount = 0;
+
+        onComplete?.Invoke();
     }
 }

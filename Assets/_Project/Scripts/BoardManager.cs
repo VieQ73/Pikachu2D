@@ -1,81 +1,120 @@
+// File: _Project/Scripts/Managers/BoardManager.cs
 using UnityEngine;
 using UnityEngine.U2D;
-using System.Collections.Generic;
+using System.Collections;
 using System.Threading.Tasks;
-using DG.Tweening;
+using UnityEngine.UI;
+using System.Collections.Generic;
 
 public class BoardManager : MonoBehaviour
 {
     [Header("Board Settings")]
     [SerializeField] private GameObject tilePrefab;
-    [SerializeField] private Transform boardPanel;
+    [SerializeField] private RectTransform boardContainer;
     [SerializeField] private GameObject lineDrawerPrefab;
 
     [Header("Assets")]
     [SerializeField] private SpriteAtlas tileAtlas;
 
+    public UILineDrawer uiLineDrawer;
     public Tile[,] _grid { get; private set; }
-    private LineDrawer _lineDrawer;
     private LevelData _currentLevelData;
+    private LineDrawer _lineDrawer;
 
     private void Awake()
     {
-        GameObject lineDrawerObj = Instantiate(lineDrawerPrefab, boardPanel);
-        _lineDrawer = lineDrawerObj.GetComponent<LineDrawer>();
+        if (lineDrawerPrefab != null && boardContainer != null)
+        {
+            GameObject lineDrawerObj = Instantiate(lineDrawerPrefab, boardContainer);
+            _lineDrawer = lineDrawerObj.GetComponent<LineDrawer>();
+        }
     }
 
     public void GenerateBoard(LevelData levelData)
     {
         _currentLevelData = levelData;
+        StartCoroutine(GenerateBoardRoutine());
+    }
 
-        foreach (Transform child in boardPanel)
+    private IEnumerator GenerateBoardRoutine()
+    {
+        // Xoá tile cũ
+        foreach (Transform child in boardContainer)
         {
             if (child.GetComponent<Tile>() != null) Destroy(child.gameObject);
         }
 
-        _grid = new Tile[_currentLevelData.Width, _currentLevelData.Height];
-
+        // Tìm hàng có tile
+        int minRow = -1, maxRow = -1;
         for (int y = 0; y < _currentLevelData.Height; y++)
         {
             for (int x = 0; x < _currentLevelData.Width; x++)
             {
+                if (_currentLevelData.Layout[y, x] != "00")
+                {
+                    if (minRow == -1) minRow = y;
+                    maxRow = y;
+                    break;
+                }
+            }
+        }
+        if (minRow == -1) yield break;
+        int visibleRows = maxRow - minRow + 1;
+
+        yield return new WaitForEndOfFrame();
+
+        // === Setup GridLayoutGroup ===
+        GridLayoutGroup gridLayout = boardContainer.GetComponent<GridLayoutGroup>();
+        gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        gridLayout.constraintCount = _currentLevelData.Width;
+
+        // Kích thước khả dụng (đã trừ padding hiện có)
+        float availWidth = boardContainer.rect.width - gridLayout.padding.left - gridLayout.padding.right;
+        float availHeight = boardContainer.rect.height - gridLayout.padding.top - gridLayout.padding.bottom;
+
+        // Kích thước cell từ 2 hướng
+        float cellWidthFromWidth = availWidth / _currentLevelData.Width;
+        float cellHeightFromHeight = availHeight / visibleRows;
+
+        // Tỉ lệ ô (40x50)
+        float targetAspectRatio = 40f / 50f;
+
+        // Chọn kích thước nhỏ nhất và giữ tỉ lệ
+        float cellWidth = Mathf.Min(cellWidthFromWidth, cellHeightFromHeight * targetAspectRatio);
+        float cellHeight = cellWidth / targetAspectRatio;
+
+        // Gán cellSize
+        gridLayout.cellSize = new Vector2(cellWidth, cellHeight);
+
+        // Căn giữa theo chiều dọc
+        float usedHeight = cellHeight * visibleRows;
+        int extraVerticalSpace = Mathf.RoundToInt(availHeight - usedHeight);
+        gridLayout.padding.top = extraVerticalSpace / 2;
+        gridLayout.padding.bottom = extraVerticalSpace - gridLayout.padding.top;
+
+        // === Sinh tile ===
+        _grid = new Tile[_currentLevelData.Width, _currentLevelData.Height];
+        for (int y = minRow; y <= maxRow; y++)
+        {
+            for (int x = 0; x < _currentLevelData.Width; x++)
+            {
+                GameObject tileObject = Instantiate(tilePrefab, boardContainer);
+                Tile tileComponent = tileObject.GetComponent<Tile>();
                 string tileCode = _currentLevelData.Layout[y, x];
-                bool isFrozen = false;
-
-                if (tileCode.EndsWith("FZ"))
-                {
-                    isFrozen = true;
-                    tileCode = tileCode.Replace("FZ", "");
-                }
-
-                if (tileCode == "00" || tileCode == "ST")
-                {
-                    _grid[x, y] = null;
-                    continue;
-                }
-
                 int tileType = ParseTileType(tileCode);
 
-                GameObject tileObject = Instantiate(tilePrefab, boardPanel);
-                Tile tileComponent = tileObject.GetComponent<Tile>();
+                tileComponent.Initialize(tileType, new Vector2Int(x, y));
 
-                Sprite tileSprite = tileAtlas.GetSprite(tileType.ToString());
-                if (tileSprite != null)
+                if (tileType > 0)
                 {
-                    tileComponent.GetTileImage().sprite = tileSprite;
-                }
-                else
-                {
-                    Debug.LogError($"Sprite cho loại {tileType} không tìm thấy trong atlas! Mã: {tileCode}");
+                    Sprite pokeSprite = tileAtlas.GetSprite(tileType.ToString());
+                    if (pokeSprite != null)
+                        tileComponent.SetSprite(pokeSprite);
+                    else
+                        Debug.LogError($"Không tìm thấy sprite tên '{tileType}' trong Tile_Atlas!");
                 }
 
-                var gridPosition = new Vector2Int(x, y);
-                tileComponent.Initialize(tileType, gridPosition);
-                tileComponent.SetFrozen(isFrozen);
-
-                // SỬA LỖI: Gọi phương thức public thay vì truy cập trực tiếp
-                tileComponent.AddClickListener(() =>
-                {
+                tileComponent.AddClickListener(() => {
                     InputManager.Instance.SelectTile(tileComponent);
                 });
 
@@ -84,141 +123,42 @@ public class BoardManager : MonoBehaviour
         }
     }
 
-    private int ParseTileType(string code)
-    {
-        if (code == "BB") return -1;
-        return int.Parse(code);
-    }
-
     public async Task HandleMatch(Tile t1, Tile t2, List<Vector2Int> path)
     {
-        List<Vector2> localPathPoints = new List<Vector2>();
-        foreach (var gridPoint in path)
+        List<Vector3> worldPath = new List<Vector3> { t1.transform.position };
+        for (int i = 1; i < path.Count - 1; i++)
         {
-            // Chuyển đổi từ tọa độ grid logic sang tọa độ local của tile tương ứng trên canvas
-            if (IsValidPosition(gridPoint) && _grid[gridPoint.x, gridPoint.y] != null)
-            {
-                localPathPoints.Add(_grid[gridPoint.x, gridPoint.y].transform.localPosition);
-            }
-            else
-            {
-                // Xử lý các điểm đi vòng ngoài (ô trống)
-                // logic này cần được làm phức tạp hơn, tạm thời chỉ nối các điểm có tile
-            }
+            Tile pathTile = _grid[path[i].x, path[i].y];
+            if (pathTile != null) worldPath.Add(pathTile.transform.position);
         }
+        worldPath.Add(t2.transform.position);
 
-        // Đảm bảo điểm bắt đầu và kết thúc luôn đúng
-        localPathPoints.Insert(0, t1.transform.localPosition);
-        localPathPoints.Add(t2.transform.localPosition);
+        AudioManager.Instance.PlayLinkedSound();
 
-        _lineDrawer.DrawLine(localPathPoints);
+        bool done = false;
+        uiLineDrawer.DrawLine(worldPath, boardContainer, 0.3f, () => done = true);
 
-        await Task.Delay(200);
+        while (!done) await Task.Yield();
 
-        if (t1.TileType == -1)
-        {
-            ExplodeBomb(t1);
-            ExplodeBomb(t2);
-        }
-        else
-        {
-            RemoveTile(t1);
-            RemoveTile(t2);
-        }
-
-        if (_currentLevelData.Gravity == GravityType.DOWN)
-        {
-            await ApplyGravity();
-        }
-    }
-
-    private void ExplodeBomb(Tile bombTile)
-    {
-        Vector2Int bombPos = bombTile.GridPosition;
-        RemoveTile(bombTile);
-
-        Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
-        foreach (var dir in directions)
-        {
-            Vector2Int targetPos = bombPos + dir;
-            if (IsValidPosition(targetPos))
-            {
-                Tile targetTile = _grid[targetPos.x, targetPos.y];
-                if (targetTile != null && targetTile.TileType > 0)
-                {
-                    RemoveTile(targetTile);
-                }
-            }
-        }
+        RemoveTile(t1);
+        RemoveTile(t2);
     }
 
     private void RemoveTile(Tile tile)
     {
         if (tile == null) return;
         Vector2Int pos = tile.GridPosition;
-        if (!IsValidPosition(pos) || _grid[pos.x, pos.y] == null) return;
+        if (_grid[pos.x, pos.y] == null) return;
 
+        tile.ShowAsEmpty();
         _grid[pos.x, pos.y] = null;
-
-        tile.transform.DOScale(0, 0.2f).SetEase(Ease.InBack).OnComplete(() =>
-        {
-            Destroy(tile.gameObject);
-        });
-
-        CheckForThaw(pos);
     }
 
-    private void CheckForThaw(Vector2Int removedPos)
+    private int ParseTileType(string code)
     {
-        Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
-        foreach (var dir in directions)
-        {
-            Vector2Int neighborPos = removedPos + dir;
-            if (IsValidPosition(neighborPos))
-            {
-                Tile neighbor = _grid[neighborPos.x, neighborPos.y];
-                if (neighbor != null && neighbor.IsFrozen)
-                {
-                    neighbor.Thaw();
-                }
-            }
-        }
-    }
-
-    private async Task ApplyGravity()
-    {
-        List<Task> allTasks = new List<Task>();
-        for (int x = 0; x < _currentLevelData.Width; x++)
-        {
-            for (int y = 0, emptyCount = 0; y < _currentLevelData.Height; y++)
-            {
-                if (_grid[x, y] == null)
-                {
-                    emptyCount++;
-                }
-                else if (emptyCount > 0)
-                {
-                    Tile tileToMove = _grid[x, y];
-                    Vector2Int newPos = new Vector2Int(x, y - emptyCount);
-
-                    _grid[x, y] = null;
-                    _grid[newPos.x, newPos.y] = tileToMove;
-                    tileToMove.SetGridPosition(newPos);
-
-                    Tween moveTween = tileToMove.transform.DOLocalMove(tileToMove.transform.localPosition + Vector3.down * 125f * emptyCount, 0.3f).SetEase(Ease.OutQuad);
-                    allTasks.Add(moveTween.AsyncWaitForCompletion());
-                }
-            }
-        }
-
-        if (allTasks.Count > 0)
-        {
-            await Task.WhenAll(allTasks);
-        }
-    }
-
-    private bool IsValidPosition(Vector2Int pos)
-    {
-        return pos.x >= 0 && pos.x < _currentLevelData.Width && pos.y >= 0 && pos.y < _currentLevelData.Height;
+        if (code == "ST" || code == "00") return 0;
+        if (code == "BB") return -1;
+        if (int.TryParse(code, out int type)) return type;
+        return 0;
     }
 }

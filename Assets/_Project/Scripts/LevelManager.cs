@@ -1,4 +1,3 @@
-// File: _Project/Scripts/Managers/LevelManager.cs
 using UnityEngine;
 using System.IO;
 using System.Collections.Generic;
@@ -18,86 +17,88 @@ public class LevelManager : MonoBehaviour
     public LevelData LoadLevel(int levelNumber)
     {
         string path = Path.Combine(Application.streamingAssetsPath, "Levels", $"level_{levelNumber}.txt");
-        Debug.Log($"[LevelManager] Bắt đầu tải level từ: {path}");
-
         if (!File.Exists(path))
         {
             Debug.LogError($"[LevelManager] LỖI: Không tìm thấy file level tại: {path}");
             return null;
         }
 
-        List<string> lines = File.ReadAllLines(path).ToList();
+        var lines = File.ReadAllLines(path)
+                        .Select(l => l.Replace("\r", "").Trim())
+                        .ToList();
+
         LevelData levelData = new LevelData();
 
-        // 1. Đọc tất cả metadata trước
+        // 1. Đọc metadata
         foreach (var line in lines)
         {
-            if (line.Contains("COLUMNS:")) levelData.Width = int.Parse(line.Split(':')[1].Trim());
-            if (line.Contains("ROWS:")) levelData.Height = int.Parse(line.Split(':')[1].Trim());
-            if (line.Contains("TIME:")) levelData.Time = int.Parse(line.Split(':')[1].Trim());
-            if (line.Contains("GRAVITY:"))
-            {
-                if (System.Enum.TryParse(line.Split(':')[1].Trim().ToUpper(), out GravityType gravity))
-                {
-                    levelData.Gravity = gravity;
-                }
-            }
+            if (line.StartsWith("COLUMNS:", System.StringComparison.OrdinalIgnoreCase))
+                levelData.Width = int.Parse(line.Split(':')[1].Trim());
+            else if (line.StartsWith("ROWS:", System.StringComparison.OrdinalIgnoreCase))
+                levelData.Height = int.Parse(line.Split(':')[1].Trim());
+            else if (line.StartsWith("TIME:", System.StringComparison.OrdinalIgnoreCase))
+                levelData.Time = int.Parse(line.Split(':')[1].Trim());
+            else if (line.StartsWith("TILE_TYPES:", System.StringComparison.OrdinalIgnoreCase))
+                levelData.TileTypes = int.Parse(line.Split(':')[1].Trim());
         }
 
-        Debug.Log($"[LevelManager] Đã đọc metadata: Width={levelData.Width}, Height={levelData.Height}");
-
-        // 2. Kiểm tra xem metadata có hợp lệ không
         if (levelData.Width <= 0 || levelData.Height <= 0)
         {
-            Debug.LogError("[LevelManager] LỖI: Width hoặc Height không hợp lệ. Kiểm tra file .txt.");
+            Debug.LogError("[LevelManager] LỖI: Width hoặc Height không hợp lệ trong metadata.");
             return null;
         }
 
-        // 3. Tìm vị trí bắt đầu của lưới
-        int gridStartIndex = -1;
-        for (int i = 0; i < lines.Count; i++)
+        // 2. Thu thập các dòng dữ liệu lưới (bỏ qua comment, metadata, dòng rỗng)
+        var gridLines = new List<string>();
+        foreach (var line in lines)
         {
-            if (lines[i].Contains("Grid Layout"))
-            {
-                gridStartIndex = i + 1; // Dữ liệu bắt đầu từ dòng ngay sau "Grid Layout"
-                break;
-            }
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            if (line.StartsWith("//")) continue;
+            if (line.Any(char.IsLetter)) continue; // bỏ dòng chứa chữ cái
+
+            // chỉ giữ dòng chứa số
+            var tokens = Regex.Split(line, @"\s+").Where(s => s.Length > 0).ToArray();
+            if (tokens.Length > 0)
+                gridLines.Add(line);
         }
 
-        if (gridStartIndex == -1)
-        {
-            Debug.LogError("[LevelManager] LỖI: Không tìm thấy dòng 'Grid Layout' trong file .txt.");
-            return null;
-        }
-
-        Debug.Log($"[LevelManager] Tìm thấy Grid Layout tại dòng {gridStartIndex}. Bắt đầu đọc lưới.");
-
-        // 4. Khởi tạo và đọc dữ liệu lưới
+        // 3. Đọc lưới vào Layout
         levelData.Layout = new string[levelData.Height, levelData.Width];
-        int currentRow = 0;
-        for (int i = gridStartIndex; i < lines.Count && currentRow < levelData.Height; i++)
-        {
-            string line = lines[i];
-            // Bỏ qua các dòng trống hoặc comment trong phần dữ liệu lưới
-            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("//")) continue;
 
-            string[] tiles = Regex.Split(line.Trim(), @"\s+");
-            if (tiles.Length == levelData.Width)
+        for (int row = 0; row < levelData.Height; row++)
+        {
+            if (row < gridLines.Count)
             {
-                for (int x = 0; x < levelData.Width; x++)
+                var tokens = Regex.Split(gridLines[row], @"\s+").Where(s => s.Length > 0).ToList();
+
+                // pad hoặc cắt
+                if (tokens.Count < levelData.Width)
                 {
-                    levelData.Layout[currentRow, x] = tiles[x];
+                    while (tokens.Count < levelData.Width) tokens.Add("00");
                 }
-                currentRow++;
+                else if (tokens.Count > levelData.Width)
+                {
+                    tokens = tokens.Take(levelData.Width).ToList();
+                }
+
+                for (int col = 0; col < levelData.Width; col++)
+                    levelData.Layout[row, col] = tokens[col];
+            }
+            else
+            {
+                // nếu thiếu dòng → pad full "00"
+                for (int col = 0; col < levelData.Width; col++)
+                    levelData.Layout[row, col] = "00";
             }
         }
 
-        if (currentRow != levelData.Height)
+        // 4. Debug preview
+        for (int r = 0; r < Mathf.Min(levelData.Height, 8); r++)
         {
-            Debug.LogWarning($"[LevelManager] Cảnh báo: Số hàng đã đọc ({currentRow}) không khớp với Height đã khai báo ({levelData.Height}).");
+            string rowStr = string.Join(" ", Enumerable.Range(0, levelData.Width).Select(c => levelData.Layout[r, c]));
+            Debug.Log($"[LevelManager] layout row {r}: {rowStr}");
         }
 
-        Debug.Log("[LevelManager] Tải level thành công.");
         return levelData;
     }
 }
