@@ -11,7 +11,6 @@ public class BoardManager : MonoBehaviour
     [Header("Board Settings")]
     [SerializeField] private GameObject tilePrefab;
     [SerializeField] private RectTransform boardContainer;
-    [SerializeField] private GameObject lineDrawerPrefab;
 
     [Header("Assets")]
     [SerializeField] private SpriteAtlas tileAtlas;
@@ -19,16 +18,8 @@ public class BoardManager : MonoBehaviour
     public UILineDrawer uiLineDrawer;
     public Tile[,] _grid { get; private set; }
     private LevelData _currentLevelData;
-    private LineDrawer _lineDrawer;
-
-    private void Awake()
-    {
-        if (lineDrawerPrefab != null && boardContainer != null)
-        {
-            GameObject lineDrawerObj = Instantiate(lineDrawerPrefab, boardContainer);
-            _lineDrawer = lineDrawerObj.GetComponent<LineDrawer>();
-        }
-    }
+    private int _minRow;
+    private int _maxRow;
 
     public void GenerateBoard(LevelData levelData)
     {
@@ -45,21 +36,22 @@ public class BoardManager : MonoBehaviour
         }
 
         // Tìm hàng có tile
-        int minRow = -1, maxRow = -1;
+        _minRow = -1;
+        _maxRow = -1;
         for (int y = 0; y < _currentLevelData.Height; y++)
         {
             for (int x = 0; x < _currentLevelData.Width; x++)
             {
                 if (_currentLevelData.Layout[y, x] != "00")
                 {
-                    if (minRow == -1) minRow = y;
-                    maxRow = y;
+                    if (_minRow == -1) _minRow = y;
+                    _maxRow = y;
                     break;
                 }
             }
         }
-        if (minRow == -1) yield break;
-        int visibleRows = maxRow - minRow + 1;
+        if (_minRow == -1) yield break;
+        int visibleRows = _maxRow - _minRow + 1;
 
         yield return new WaitForEndOfFrame();
 
@@ -68,33 +60,33 @@ public class BoardManager : MonoBehaviour
         gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         gridLayout.constraintCount = _currentLevelData.Width;
 
-        // Kích thước khả dụng (đã trừ padding hiện có)
         float availWidth = boardContainer.rect.width - gridLayout.padding.left - gridLayout.padding.right;
         float availHeight = boardContainer.rect.height - gridLayout.padding.top - gridLayout.padding.bottom;
 
-        // Kích thước cell từ 2 hướng
         float cellWidthFromWidth = availWidth / _currentLevelData.Width;
         float cellHeightFromHeight = availHeight / visibleRows;
 
-        // Tỉ lệ ô (40x50)
         float targetAspectRatio = 40f / 50f;
 
-        // Chọn kích thước nhỏ nhất và giữ tỉ lệ
         float cellWidth = Mathf.Min(cellWidthFromWidth, cellHeightFromHeight * targetAspectRatio);
         float cellHeight = cellWidth / targetAspectRatio;
 
-        // Gán cellSize
         gridLayout.cellSize = new Vector2(cellWidth, cellHeight);
 
-        // Căn giữa theo chiều dọc
         float usedHeight = cellHeight * visibleRows;
         int extraVerticalSpace = Mathf.RoundToInt(availHeight - usedHeight);
         gridLayout.padding.top = extraVerticalSpace / 2;
         gridLayout.padding.bottom = extraVerticalSpace - gridLayout.padding.top;
 
+        float usedWidth = cellWidth * _currentLevelData.Width;
+        int extraHorizontalSpace = Mathf.RoundToInt(availWidth - usedWidth);
+        gridLayout.padding.left = extraHorizontalSpace / 2;
+        gridLayout.padding.right = extraHorizontalSpace - gridLayout.padding.left;
+
+
         // === Sinh tile ===
         _grid = new Tile[_currentLevelData.Width, _currentLevelData.Height];
-        for (int y = minRow; y <= maxRow; y++)
+        for (int y = _minRow; y <= _maxRow; y++)
         {
             for (int x = 0; x < _currentLevelData.Width; x++)
             {
@@ -125,18 +117,18 @@ public class BoardManager : MonoBehaviour
 
     public async Task HandleMatch(Tile t1, Tile t2, List<Vector2Int> path)
     {
-        List<Vector3> worldPath = new List<Vector3> { t1.transform.position };
-        for (int i = 1; i < path.Count - 1; i++)
+        if (path == null || path.Count < 2 || t1 == null || t2 == null) return;
+
+        List<Vector2> localPath = new List<Vector2>();
+        foreach (var gridPoint in path)
         {
-            Tile pathTile = _grid[path[i].x, path[i].y];
-            if (pathTile != null) worldPath.Add(pathTile.transform.position);
+            localPath.Add(GetLocalPositionForGridPoint(gridPoint));
         }
-        worldPath.Add(t2.transform.position);
 
         AudioManager.Instance.PlayLinkedSound();
 
         bool done = false;
-        uiLineDrawer.DrawLine(worldPath, boardContainer, 0.3f, () => done = true);
+        uiLineDrawer.DrawLine(localPath, 0.5f, () => done = true);
 
         while (!done) await Task.Yield();
 
@@ -144,10 +136,41 @@ public class BoardManager : MonoBehaviour
         RemoveTile(t2);
     }
 
+    private Vector2 GetLocalPositionForGridPoint(Vector2Int gridPoint)
+    {
+        GridLayoutGroup gridLayout = boardContainer.GetComponent<GridLayoutGroup>();
+        Vector2 cellSize = gridLayout.cellSize;
+        Vector2 spacing = gridLayout.spacing;
+
+        // Kích thước đầy đủ của container
+        float containerWidth = boardContainer.rect.width;
+        float containerHeight = boardContainer.rect.height;
+
+        // Pivot của container (thường là 0.5, 0.5)
+        Vector2 pivot = boardContainer.pivot;
+
+        // Tọa độ của góc trên bên trái của toàn bộ lưới (khu vực padding + cells)
+        float startX = -containerWidth * pivot.x + gridLayout.padding.left;
+        float startY = containerHeight * (1 - pivot.y) - gridLayout.padding.top;
+
+        // Tọa độ của góc trên bên trái của Ô (cell) tương ứng
+        // Tọa độ y trong lưới được hiển thị là y - _minRow
+        float cellCornerX = startX + gridPoint.x * (cellSize.x + spacing.x);
+        float cellCornerY = startY - (gridPoint.y - _minRow) * (cellSize.y + spacing.y);
+
+        // Tọa độ TÂM của ô
+        float centerX = cellCornerX + cellSize.x / 2f;
+        float centerY = cellCornerY - cellSize.y ;
+
+        return new Vector2(centerX, centerY);
+    }
+
+
     private void RemoveTile(Tile tile)
     {
         if (tile == null) return;
         Vector2Int pos = tile.GridPosition;
+        if (pos.x < 0 || pos.x >= _currentLevelData.Width || pos.y < 0 || pos.y >= _currentLevelData.Height) return;
         if (_grid[pos.x, pos.y] == null) return;
 
         tile.ShowAsEmpty();
