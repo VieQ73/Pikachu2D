@@ -66,6 +66,11 @@ public class UIManager : MonoBehaviour
         }
     }
 
+    public bool IsPausePanelActive()
+    {
+        return pausePanel != null && pausePanel.activeInHierarchy;
+    }
+
     // Các hàm để bật/tắt panel
     public void ShowPausePanel(bool show)
     {
@@ -83,5 +88,4 @@ public class UIManager : MonoBehaviour
     }
 }
 
-// Enum này nên được đặt ở một file riêng, nhưng tạm để đây cho tiện
 public enum PowerUpType { Hint, Shuffle, Hammer, FreezeClock }

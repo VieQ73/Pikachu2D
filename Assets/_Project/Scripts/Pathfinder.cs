@@ -133,4 +133,44 @@ public static class Pathfinder
 
         return simplified;
     }
+
+    public static (Tile, Tile) FindHint(Tile[,] grid, int width, int height)
+    {
+        List<Tile> remainingTiles = new List<Tile>();
+        // Lấy tất cả các tile còn lại trên bàn cờ
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (grid[x, y] != null && grid[x, y].TileType > 0)
+                {
+                    remainingTiles.Add(grid[x, y]);
+                }
+            }
+        }
+
+        // Duyệt qua tất cả các cặp có thể có
+        for (int i = 0; i < remainingTiles.Count; i++)
+        {
+            for (int j = i + 1; j < remainingTiles.Count; j++)
+            {
+                Tile t1 = remainingTiles[i];
+                Tile t2 = remainingTiles[j];
+
+                // Nếu cùng loại, thử tìm đường
+                if (t1.TileType == t2.TileType)
+                {
+                    if (FindPath(t1, t2, grid, width, height) != null)
+                    {
+                        // Tìm thấy một cặp, trả về ngay lập tức
+                        return (t1, t2);
+                    }
+                }
+            }
+        }
+
+        // Không tìm thấy cặp nào
+        return (null, null);
+    }
+
 }

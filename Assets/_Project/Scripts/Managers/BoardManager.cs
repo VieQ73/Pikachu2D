@@ -1,10 +1,12 @@
 // File: _Project/Scripts/Managers/BoardManager.cs
+using DG.Tweening;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.U2D;
-using System.Collections;
-using System.Threading.Tasks;
 using UnityEngine.UI;
-using System.Collections.Generic;
 
 public class BoardManager : MonoBehaviour
 {
@@ -21,10 +23,53 @@ public class BoardManager : MonoBehaviour
     private int _minRow;
     private int _maxRow;
 
-    public void GenerateBoard(LevelData levelData)
+    public int GenerateBoard(LevelData levelData)
     {
         _currentLevelData = levelData;
+        int pairCount = 0; // Biến đếm
+
+        // Tạo một Dictionary để đếm số lượng mỗi loại tile
+        Dictionary<int, int> tileTypeCounts = new Dictionary<int, int>();
+
+        // Lặp qua layout để đếm trước
+        for (int y = 0; y < _currentLevelData.Height; y++)
+        {
+            for (int x = 0; x < _currentLevelData.Width; x++)
+            {
+                string tileCode = _currentLevelData.Layout[y, x];
+                int tileType = ParseTileType(tileCode);
+                if (tileType > 0) // Chỉ đếm tile thường
+                {
+                    if (tileTypeCounts.ContainsKey(tileType))
+                        tileTypeCounts[tileType]++;
+                    else
+                        tileTypeCounts[tileType] = 1;
+                }
+            }
+        }
+
+        // Tính tổng số cặp (mỗi 2 tile cùng loại là 1 cặp)
+        foreach (var count in tileTypeCounts.Values)
+        {
+            pairCount += count / 2;
+        }
+
+        Debug.Log($"[BoardManager] Màn chơi có {pairCount} cặp tile.");
+
+        // Bắt đầu coroutine để sinh bàn cờ vật lý
         StartCoroutine(GenerateBoardRoutine());
+
+        return pairCount; // Trả về số cặp
+    }
+
+    public int GetRemainingTileCount()
+    {
+        int count = 0;
+        foreach (var tile in _grid)
+        {
+            if (tile != null && tile.TileType != 0) count++;
+        }
+        return count;
     }
 
     private IEnumerator GenerateBoardRoutine()
@@ -132,8 +177,10 @@ public class BoardManager : MonoBehaviour
 
         while (!done) await Task.Yield();
 
-        RemoveTile(t1);
-        RemoveTile(t2);
+        Task t1RemoveTask = RemoveTile(t1);
+        Task t2RemoveTask = RemoveTile(t2);
+
+        await Task.WhenAll(t1RemoveTask, t2RemoveTask);
     }
 
     private Vector2 GetLocalPositionForGridPoint(Vector2Int gridPoint)
@@ -166,15 +213,18 @@ public class BoardManager : MonoBehaviour
     }
 
 
-    private void RemoveTile(Tile tile)
+    private Task RemoveTile(Tile tile)
     {
-        if (tile == null) return;
+        if (tile == null) return Task.CompletedTask;
         Vector2Int pos = tile.GridPosition;
-        if (pos.x < 0 || pos.x >= _currentLevelData.Width || pos.y < 0 || pos.y >= _currentLevelData.Height) return;
-        if (_grid[pos.x, pos.y] == null) return;
+        if (pos.x < 0 || pos.x >= _currentLevelData.Width || pos.y < 0 || pos.y >= _currentLevelData.Height) return Task.CompletedTask;
+        if (_grid[pos.x, pos.y] == null) return Task.CompletedTask;
 
-        tile.ShowAsEmpty();
+        // Đánh dấu ô này là trống trong lưới logic NGAY LẬP TỨC
         _grid[pos.x, pos.y] = null;
+
+        // Trả về Task của hiệu ứng để GameManager có thể chờ
+        return tile.ShowAsEmptyAndReturnTask();
     }
 
     private int ParseTileType(string code)
@@ -183,5 +233,57 @@ public class BoardManager : MonoBehaviour
         if (code == "BB") return -1;
         if (int.TryParse(code, out int type)) return type;
         return 0;
+    }
+
+    public bool AreMovesAvailable()
+    {
+        // Gọi hàm FindHint, nếu nó không trả về null thì vẫn còn nước đi
+        var hint = Pathfinder.FindHint(_grid, _currentLevelData.Width, _currentLevelData.Height);
+        return hint.Item1 != null;
+    }
+
+    public void ShuffleBoard()
+    {
+        AudioManager.Instance.PlayShuffleSound();
+
+        // 1. Lấy ra danh sách các tile object và dữ liệu của chúng
+        List<Tile> remainingTiles = new List<Tile>();
+        for (int y = _minRow; y <= _maxRow; y++)
+        {
+            for (int x = 0; x < _currentLevelData.Width; x++)
+            {
+                if (_grid[x, y] != null && _grid[x, y].TileType > 0)
+                {
+                    remainingTiles.Add(_grid[x, y]);
+                }
+            }
+        }
+
+        // Lấy ra chỉ dữ liệu (Sprite và Type) để xáo trộn
+        var tileDataList = remainingTiles.Select(t => new { Sprite = t.GetSprite(), Type = t.TileType }).ToList();
+
+        // Xáo trộn danh sách dữ liệu
+        System.Random rng = new System.Random();
+        var shuffledDataList = tileDataList.OrderBy(a => rng.Next()).ToList();
+
+        // 2. Gán lại dữ liệu đã xáo trộn vào các tile object hiện có
+        for (int i = 0; i < remainingTiles.Count; i++)
+        {
+            Tile tileObject = remainingTiles[i];
+            var newTileData = shuffledDataList[i];
+
+            // Hoán đổi dữ liệu mà không thay đổi vị trí vật lý hay parent
+            tileObject.Initialize(newTileData.Type, tileObject.GridPosition);
+            tileObject.SetSprite(newTileData.Sprite);
+
+            tileObject.transform.DOPunchScale(new Vector3(0.2f, 0.2f, 0), 0.3f);
+        }
+
+        // Đảm bảo có nước đi sau khi xáo trộn
+        if (!AreMovesAvailable())
+        {
+            Debug.Log("Xáo trộn ra thế bí, đang thử lại...");
+            ShuffleBoard();
+        }
     }
 }

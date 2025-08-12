@@ -1,8 +1,8 @@
-// File: _Project/Scripts/Gameplay/Tile.cs
 using UnityEngine;
 using UnityEngine.UI;
 using DG.Tweening;
 using System;
+using System.Threading.Tasks;
 
 [RequireComponent(typeof(Button))]
 public class Tile : MonoBehaviour
@@ -12,10 +12,12 @@ public class Tile : MonoBehaviour
 
     [SerializeField] private Image pokemonImage;
     [SerializeField] private Image background;
+    [SerializeField] private Transform contentTransform;
 
     private Button tileButton;
     private readonly Color _normalColor = Color.white;
     private readonly Color _selectedColor = new Color(1f, 0.85f, 0.85f, 1f);
+    private readonly Color _hintColor = Color.yellow;
 
     private void Awake()
     {
@@ -58,16 +60,21 @@ public class Tile : MonoBehaviour
         }
     }
 
-    public void ShowAsEmpty()
+    public Task ShowAsEmptyAndReturnTask()
     {
         TileType = 0;
 
-        pokemonImage.transform.DOScale(0, 0.3f).SetEase(Ease.InBack).OnComplete(() =>
+        // Dùng DOTween.To...AsTask() để tạo một Task có thể await được
+        return contentTransform.DOScale(0, 0.3f).SetEase(Ease.InBack).AsyncWaitForCompletion().ContinueWith(_ =>
         {
-            pokemonImage.gameObject.SetActive(false);
-            background.gameObject.SetActive(true);
-            pokemonImage.transform.localScale = Vector3.one;
-            pokemonImage.color = _normalColor;
+            // Đoạn code này sẽ chạy sau khi hiệu ứng hoàn thành
+            // Cần chạy trên main thread
+            MainThreadDispatcher.RunOnMainThread(() => {
+                pokemonImage.gameObject.SetActive(false);
+                background.gameObject.SetActive(true);
+                contentTransform.localScale = Vector3.one;
+                pokemonImage.color = _normalColor;
+            });
         });
     }
 
@@ -86,5 +93,24 @@ public class Tile : MonoBehaviour
     {
         tileButton.onClick.RemoveAllListeners();
         tileButton.onClick.AddListener(() => action?.Invoke());
+    }
+
+    public void DoHintEffect()
+    {
+        // Tạo một sequence để kiểm soát hiệu ứng
+        Sequence hintSequence = DOTween.Sequence();
+        // Lặp lại hiệu ứng 3 lần
+        hintSequence.Append(pokemonImage.DOColor(_hintColor, 0.3f).SetEase(Ease.OutQuad));
+        hintSequence.Append(pokemonImage.DOColor(_normalColor, 0.3f).SetEase(Ease.InQuad));
+        hintSequence.SetLoops(3);
+    }
+
+    public Sprite GetSprite()
+    {
+        if (pokemonImage != null)
+        {
+            return pokemonImage.sprite;
+        }
+        return null;
     }
 }
