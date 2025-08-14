@@ -60,7 +60,7 @@ public class GameManager : MonoBehaviour
             Debug.LogError("KHÔNG TÌM THẤY AUDIOMANAGER TRONG SCENE!");
         }
 
-        StartGame(1);
+        StartGame(2);
     }
 
     private void Update()
@@ -93,49 +93,44 @@ public class GameManager : MonoBehaviour
             case GameState.Playing:
                 uiManager.ShowPausePanel(false);
                 if (_settingsPanelInstance != null) _settingsPanelInstance.SetActive(false);
-                audioManager.ToggleBGMMute(false);
-                audioManager.PlayBackgroundMusic(); // Đảm bảo phát lại BGM từ đầu khi quay lại trạng thái Playing
+                audioManager.UnPauseBackgroundMusic(); // Tiếp tục phát nhạc nền
                 break;
             case GameState.Paused:
                 uiManager.ShowPausePanel(true);
-                audioManager.ToggleBGMMute(true);
+                audioManager.PauseBackgroundMusic(); // Tạm dừng nhạc nền
                 break;
             case GameState.Settings:
                 if (_settingsPanelInstance == null)
                 {
                     // Tạo panel làm con của UIManager hoặc Canvas
                     _settingsPanelInstance = Instantiate(settingsPanelPrefab, uiManager.transform, false);
-
-                    // Đảm bảo vị trí cục bộ đúng (thường là (0,0,0) để khớp anchor)
                     _settingsPanelInstance.transform.localPosition = Vector3.zero;
                     _settingsPanelInstance.transform.localScale = Vector3.one;
 
-                    // Nếu prefab có Canvas riêng, đặt sorting order cao để hiển thị trên cùng
                     Canvas panelCanvas = _settingsPanelInstance.GetComponent<Canvas>();
                     if (panelCanvas != null)
                     {
                         panelCanvas.overrideSorting = true;
-                        panelCanvas.sortingOrder = 100; // Giá trị cao để ở trên các UI khác
+                        panelCanvas.sortingOrder = 100;
                     }
                     else
                     {
-                        // Nếu không có Canvas riêng, chỉ dựa vào sibling index
                         Debug.LogWarning("Settings panel không có Canvas riêng, có thể bị che khuất bởi các Canvas khác.");
                     }
                 }
                 _settingsPanelInstance.transform.SetAsLastSibling();
                 _settingsPanelInstance.SetActive(true);
-                audioManager.ToggleBGMMute(true);
+                audioManager.PauseBackgroundMusic(); // Tạm dừng nhạc nền trong Settings
                 break;
             case GameState.GameOver:
                 uiManager.ShowLosePanel(true);
-                audioManager.ToggleBGMMute(true);
+                audioManager.PauseBackgroundMusic(); // Tạm dừng nhạc nền
                 audioManager.PlayOhoSound();
                 break;
             case GameState.Win:
                 audioManager.PlayWinSound();
                 uiManager.ShowWinPanel(true);
-                audioManager.ToggleBGMMute(true);
+                audioManager.PauseBackgroundMusic(); // Tạm dừng nhạc nền
                 break;
         }
     }

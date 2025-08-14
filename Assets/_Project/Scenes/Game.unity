@@ -154,6 +154,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   tilePrefab: {fileID: 3638816817055057858, guid: e102cb3ba8437ac4cb800e98cf2cae4f, type: 3}
   boardContainer: {fileID: 902777481}
+  stonePrefab: {fileID: 685691586044314660, guid: 2e3426354ceca9640804bee3110d383e, type: 3}
   tileAtlas: {fileID: 4343727234628468602, guid: 2872376086428604ca49532a673a3889, type: 2}
   uiLineDrawer: {fileID: 1617668201}
 --- !u!4 &5764220
@@ -414,7 +415,6 @@ MonoBehaviour:
   boardManager: {fileID: 5764219}
   levelManager: {fileID: 724838882}
   uiManager: {fileID: 1212389177}
-  audioManager: {fileID: 0}
   settingsPanelPrefab: {fileID: 1299228775432466097, guid: ff80fc9c3c018e14ea2de71ea0546b4a, type: 3}
 --- !u!4 &95502490
 Transform:

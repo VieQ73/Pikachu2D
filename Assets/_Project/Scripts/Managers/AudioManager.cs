@@ -145,6 +145,24 @@ public class AudioManager : MonoBehaviour
         }
     }
 
+    public void PauseBackgroundMusic()
+    {
+        if (bgmSource != null && bgmSource.isPlaying)
+        {
+            bgmSource.Pause();
+            _isBgmPlaying = false;
+        }
+    }
+
+    public void UnPauseBackgroundMusic()
+    {
+        if (bgmSource != null && !bgmSource.isPlaying && bgmSource.clip != null)
+        {
+            bgmSource.UnPause();
+            _isBgmPlaying = true;
+        }
+    }
+
     public float GetBGMVolume() { return bgmSource != null ? bgmSource.volume : 0.8f; }
     public float GetSFXVolume() { return sfxSource != null ? sfxSource.volume : 1.0f; }
 }

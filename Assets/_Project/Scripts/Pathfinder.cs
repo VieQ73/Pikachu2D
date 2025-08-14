@@ -82,6 +82,8 @@ public static class Pathfinder
                 if (gridPos.x >= 0 && gridPos.x < width && gridPos.y >= 0 && gridPos.y < height)
                 {
                     var tile = grid[gridPos.x, gridPos.y];
+                    // Ô có thể đi qua là ô trống (null)
+                    // Tile Đá (type -2) KHÔNG thể đi qua
                     isWalkable = (tile == null || tile.TileType == 0);
                 }
 
