@@ -7,7 +7,7 @@ public class UILineDrawer : MonoBehaviour
 {
     public Sprite lineSprite;
     public Color lineColor = Color.red;
-    public float lineWidth = 10f; // Tăng độ dày một chút
+    public float lineWidth = 10f; // 
 
     private readonly List<GameObject> segments = new List<GameObject>();
 

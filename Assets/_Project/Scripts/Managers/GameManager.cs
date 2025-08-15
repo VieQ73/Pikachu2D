@@ -8,8 +8,8 @@ public enum GameState
 {
     Playing,
     Paused,
-    Settings,
     GameOver,
+    Settings,
     Win
 }
 
@@ -65,8 +65,11 @@ public class GameManager : MonoBehaviour
 
     private void Update()
     {
-        // Chỉ đếm ngược thời gian khi game ở trạng thái 'Playing'
-        if (CurrentState != GameState.Playing) return;
+        // Chỉ đếm ngược thời gian khi game ở trạng thái 'Playing' // setting
+        if (CurrentState == GameState.Paused || CurrentState == GameState.GameOver || CurrentState == GameState.Win)
+        {
+            return;
+        }
 
         if (_currentTime > 0)
         {
@@ -93,44 +96,41 @@ public class GameManager : MonoBehaviour
             case GameState.Playing:
                 uiManager.ShowPausePanel(false);
                 if (_settingsPanelInstance != null) _settingsPanelInstance.SetActive(false);
-                audioManager.UnPauseBackgroundMusic(); // Tiếp tục phát nhạc nền
+                audioManager.UnPauseBackgroundMusic();
+                Time.timeScale = 1f; // Đảm bảo game chạy
                 break;
             case GameState.Paused:
+                Time.timeScale = 0f; // Dừng hoàn toàn game
                 uiManager.ShowPausePanel(true);
-                audioManager.PauseBackgroundMusic(); // Tạm dừng nhạc nền
+                audioManager.PauseBackgroundMusic();
                 break;
             case GameState.Settings:
+                // Không dừng Time.timeScale
                 if (_settingsPanelInstance == null)
                 {
-                    // Tạo panel làm con của UIManager hoặc Canvas
-                    _settingsPanelInstance = Instantiate(settingsPanelPrefab, uiManager.transform, false);
-                    _settingsPanelInstance.transform.localPosition = Vector3.zero;
-                    _settingsPanelInstance.transform.localScale = Vector3.one;
-
+                    _settingsPanelInstance = Instantiate(settingsPanelPrefab, uiManager.transform);
+                    // Cấu hình để panel hiển thị trên cùng
                     Canvas panelCanvas = _settingsPanelInstance.GetComponent<Canvas>();
                     if (panelCanvas != null)
                     {
                         panelCanvas.overrideSorting = true;
-                        panelCanvas.sortingOrder = 100;
+                        panelCanvas.sortingOrder = 200;
                     }
-                    else
-                    {
-                        Debug.LogWarning("Settings panel không có Canvas riêng, có thể bị che khuất bởi các Canvas khác.");
-                    }
+                    _settingsPanelInstance.transform.SetAsLastSibling();
                 }
-                _settingsPanelInstance.transform.SetAsLastSibling();
                 _settingsPanelInstance.SetActive(true);
-                audioManager.PauseBackgroundMusic(); // Tạm dừng nhạc nền trong Settings
                 break;
             case GameState.GameOver:
+                Time.timeScale = 0f;
                 uiManager.ShowLosePanel(true);
-                audioManager.PauseBackgroundMusic(); // Tạm dừng nhạc nền
+                audioManager.PauseBackgroundMusic();
                 audioManager.PlayOhoSound();
                 break;
             case GameState.Win:
+                Time.timeScale = 0f;
                 audioManager.PlayWinSound();
                 uiManager.ShowWinPanel(true);
-                audioManager.PauseBackgroundMusic(); // Tạm dừng nhạc nền
+                audioManager.PauseBackgroundMusic();
                 break;
         }
     }
@@ -276,7 +276,23 @@ public class GameManager : MonoBehaviour
 
     public void OnSettingsButtonClicked()
     {
-        ChangeState(GameState.Settings);
+        // Nếu panel chưa được tạo, hãy tạo nó
+        if (_settingsPanelInstance == null)
+        {
+            _settingsPanelInstance = Instantiate(settingsPanelPrefab, uiManager.transform);
+            // Áp dụng các thay đổi để nó hiển thị đúng
+            _settingsPanelInstance.transform.SetAsLastSibling();
+            Canvas panelCanvas = _settingsPanelInstance.GetComponent<Canvas>();
+            if (panelCanvas != null)
+            {
+                panelCanvas.overrideSorting = true;
+                panelCanvas.sortingOrder = 100;
+            }
+        }
+
+        // Bật/tắt panel
+        bool isActive = _settingsPanelInstance.activeSelf;
+        _settingsPanelInstance.SetActive(!isActive);
     }
 
     public void PauseGame()
@@ -295,9 +311,8 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    public void CloseSettingsAndResume()
+    public void CloseSettingsPanel()
     {
-        // Khi đóng settings, luôn quay về trạng thái Playing
         if (CurrentState == GameState.Settings)
         {
             ChangeState(GameState.Playing);
@@ -321,7 +336,7 @@ public class GameManager : MonoBehaviour
     {
         // Dừng BGM trước khi chuyển màn
         audioManager.StopBackgroundMusic();
-        // Tạm thời, chỉ chơi lại màn 1
+        // Tạm thời, chỉ chơi lại màn 
         Debug.Log("Chuyển sang màn tiếp theo... (chưa triển khai)");
         RestartGame();
     }

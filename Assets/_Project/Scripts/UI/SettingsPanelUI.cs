@@ -25,12 +25,12 @@ public class SettingsPanelUI : MonoBehaviour
         closeButton.onClick.AddListener(ClosePanel);
     }
 
-    private void OnBGMVolumeChanged(float value)
+    public void OnBGMVolumeChanged(float value)
     {
         if (AudioManager.Instance != null) AudioManager.Instance.SetBGMVolume(value);
     }
 
-    private void OnSFXVolumeChanged(float value)
+    public void OnSFXVolumeChanged(float value)
     {
         if (AudioManager.Instance != null) AudioManager.Instance.SetSFXVolume(value);
     }

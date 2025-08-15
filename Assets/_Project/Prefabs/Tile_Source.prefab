@@ -138,7 +138,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 0.12941177}
+  m_Color: {r: 1, g: 0.95282364, b: 0.2584905, a: 0.25490198}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -216,8 +216,6 @@ MonoBehaviour:
   contentTransform: {fileID: 7953135228153595304}
   freezeOverlay: {fileID: 5944039567650479135}
   specialIconImage: {fileID: 3432442033626035328}
-  bombSprite: {fileID: 21300000, guid: 3a5a68a539451914790a73951faf2375, type: 3}
-  stoneSprite: {fileID: 21300000, guid: b385b8a382d3ebe459e8a5eb6db6d495, type: 3}
 --- !u!1 &3646042678376140384
 GameObject:
   m_ObjectHideFlags: 0
